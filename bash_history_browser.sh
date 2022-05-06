@@ -1,10 +1,3 @@
-#add copy to terminal
-#add --keep-title
-
-#add grouping 
-
-
-
 #!/bin/bash
 
 HEIGHT=30
@@ -20,42 +13,21 @@ IFS='\\\\'
 n=100 #number of elements
 
 #get the last n elements of history, invert them, and store them in his variable, delimited by \\\\
-his=$( tail -$n ~/.bash_history | tac -s '\n' | awk '{print " " $0 "\\\\"}' )
+all=$( tail -$n ~/.bash_history | tac -s '\n' | awk '{print $0 "\\\\"}' )
 
+uniq=$( echo ${all[@]} | sort --unique )
 
-uniq=()
+firstlayer=$( echo $uniq | sed 's/|/ /' | awk '{print $1}' | sort --unique )
 
+#fomat them for the menu
+#dialog options format is (number1 "string1" number2 "string2" ...)
+fn=$( echo ${firstlayer[@]} | wc -l )
 i=1
-while [ $i -ne $n ]
-do  
-    #dialog options format is (number1 "string1" number2 "string2" ...)
-    #awk the current row
-    cur=($(echo ${his[@]} | awk -v i="$i" 'FNR == i {print $0;exit}'))
-    
-    i=$(($i+1)) 
-
-    #check current element's first word if it is in the unique set of elements
-    #turncate to first word
-    firstword=($( echo ${cur[@]} | cut -d " " -f2 ))
-
-    #check if uniq contains firstword or not
-    echo ${uniq[@]} | grep -w -q $firstword
-    
-    #compare stdout 
-    if [ $? == 1 ]; then
-        #add to set
-        uniq=(${uniq[@]} $firstword)
-    fi
-done
-
-
-un=($(echo ${uniq[@]} | wc -w))
-i=1
-while [ $i -ne $un ]
+while [ $i -ne $fn ]
 do
     #awk the current row
-    cur=($(echo ${uniq[@]}| awk -v i="$i" ' {print $i}'))
-
+    cur=($(echo ${firstlayer[@]}| awk -v i="$i" 'FNR == i {print $0;exit}'))
+    
     #add the row number
     uniqopt=(${uniqopt[@]} $i)
 
@@ -64,7 +36,6 @@ do
 
     #i++
     i=$(($i+1)) 
-
 done
 
 #show first dialog expect choice
@@ -75,29 +46,46 @@ CHOICE=$(dialog \
                 $HEIGHT $WIDTH $CHOICE_HEIGHT \
                 ${uniqopt[@]} \
                 2>&1 >/dev/tty)
-clear
+
+CHOICE=${uniqopt[($CHOICE*2)-1]} #(choice*2)-1 transfer function to the dialog option format
 
 #show second dialog choice
-HEIGHT=20
-WIDTH=10
+HEIGHT=30
+WIDTH=130
 CHOICE_HEIGHT=4
 BACKTITLE="history browser"
 TITLE="2nd layer"
 MENU="choose one of the following commands:"
 
-#create an array of elements that match the first word
-#place them in the selection menu
+secondlayer=$( echo $uniq | grep "^$CHOICE" )
+
+#fomat them for the menu
+#dialog options format is (number1 "string1" number2 "string2" ...)
+
+secuniqopt=()
+sn=($(echo ${secondlayer[@]} | wc -l))
+
+echo ${secondlayer[@]}
+echo $sn
+echo "--------"
+
+i=1
+for k in ${secondlayer[@]}
+do
+    #add the (number, row)
+    secuniqopt=(${secuniqopt[@]} $i $k)
+    
+    #i++
+    i=$(($i+1)) 
+done
 
 CHOICE=$(dialog \
                 --backtitle "$BACKTITLE" \
                 --title "$TITLE" \
                 --menu "$MENU" \
                 $HEIGHT $WIDTH $CHOICE_HEIGHT \
-                ${uniqopt[@]} \
+                ${secuniqopt[@]} \
                 2>&1 >/dev/tty)
 clear
-
-
-
 
 # echo ${his[@]} | awk -v CHOICE="$CHOICE" 'FNR == CHOICE {print $0;exit}'
