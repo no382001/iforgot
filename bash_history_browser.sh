@@ -2,7 +2,7 @@
 
 #main cycle
 HEIGHT=30
-WIDTH=25
+WIDTH=70
 CHOICE_HEIGHT=4
 BACKTITLE="history browser"
 TITLE="1st layer"
@@ -11,43 +11,45 @@ MENU="choose one of the following starting words:"
 OIFS=$IFS #save original delimiter
 IFS='\\\\'
 
-n=600 #number of elements
-
-#get the last n elements of history, invert them, and store them in his variable, delimited by \\\\
-#tail -$n
-all=$( cat ~/.bash_history | sort --unique |tac -s '\n' | awk '{print $0 "\\\\"}' )
-
-uniq=$( echo ${all[@]} )
+#get all the elements of history, invert them, and store them in this variable, delimited by \\\\
+uniq=$( cat ~/.bash_history | awk '{!seen[$0]++};END{for(i in seen) if(seen[i]==1)print i}' | tac -s '\n' )
 
 #get the first word
-firstlayer=$( echo $uniq | sed 's/|/ /' | awk '{print $1}' | sort --unique )
+firstlayer=$( echo $uniq | cut -d" " -f1 | awk '{!seen[$0]++};END{for(i in seen) if(seen[i]==1)print i}' )
 
-#fomat them for the menu
-#dialog options format is (number1 "string1" number2 "string2" ...)
-fn=$( echo ${firstlayer[@]} | wc -l )
+#format them for the menu
+fn=$( echo $firstlayer | wc -l )
 i=1
 while [ $i -ne $fn ]
 do
-    #awk the current row
-    cur=($(echo ${firstlayer[@]}| awk -v i="$i" 'FNR == i {print $0;exit}'))
+    cur=($(echo $firstlayer| awk -v i="$i" 'FNR == i {print $0;exit}'))
 
-    uniqopt=(${uniqopt[@]} $i $cur)
+    num=$(echo $uniq | grep "^$cur" | wc -l)
 
-    #i++
-    i=$(($i+1)) 
+    if [ $num -lt 2 ]
+        then
+            cur=$(echo $uniq | grep "^$cur")
+    fi
+
+    #dialog options format is (number1 "string1" number2 "string2" ...)
+    uniqopt=(${uniqopt[@]} "$i" $(echo n:$num'|'$cur))
+    i=$(($i+1))
 done
-
 
 #show first dialog and expect choice
 CHOICE=$(dialog \
                 --backtitle "$BACKTITLE" \
                 --title "$TITLE" \
+                --column-separator "|" \
                 --menu "$MENU" \
                 $HEIGHT $WIDTH $CHOICE_HEIGHT \
                 ${uniqopt[@]} \
                 2>&1 >/dev/tty)
 
-CHOICE=${uniqopt[($CHOICE*2)-1]} #(choice*2)-1 transfer function to the dialog option format
+choice_str=$(echo $firstlayer| awk -v i="$CHOICE" 'FNR == i {print $0;exit}')
+
+# echo $choice_str
+# exit
 
 #show second dialog choice
 HEIGHT=30
@@ -56,29 +58,23 @@ CHOICE_HEIGHT=4
 BACKTITLE="history browser"
 TITLE="2nd layer"
 MENU="choose one of the following commands:"
+                                                      #maybe some fail bc they are just one word and im searching for more
+secondlayer=$( echo $uniq | grep "^$choice_str" )
 
-secondlayer=$( echo $uniq | grep "^$CHOICE" )
-
-#fomat them for the menu
-#dialog options format is (number1 "string1" number2 "string2" ...)
-
+#format them for the menu
 secuniqopt=()
-
 sn=($(echo ${secondlayer[@]} | wc -l))
 i=1
 while [ $i -ne $sn ]
 do
-    #awk the current row
     cur=($(echo ${secondlayer[@]}| awk -v i="$i" 'FNR == i {print $0;exit}'))
-    
-    #add the (number, row)
+    #dialog options format is (number1 "string1" number2 "string2" ...)
     secuniqopt=(${secuniqopt[@]} $i $cur)
-    #i++
-
     i=$(($i+1)) 
 done
 
-echo ${secuniqopt[@]}
+# echo ${secuniqopt[@]}
+# exit
 
 CHOICE=$(dialog \
                 --backtitle "$BACKTITLE" \
@@ -89,4 +85,11 @@ CHOICE=$(dialog \
                 2>&1 >/dev/tty)
 clear
 
-echo ${secuniqopt[($CHOICE*2)-1]}
+second_choice_str=$(echo ${secondlayer[@]} | awk -v i="$CHOICE" 'FNR == i {print $0;exit}')
+
+if [ -z "$second_choice_str" ]
+    then
+        echo $choice_str
+    else
+        echo $second_choice_str
+fi
